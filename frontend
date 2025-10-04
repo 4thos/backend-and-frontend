@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+  <meta charset="UTF-8">
+  <title>Diário Digital</title>
+</head>
+<body>
+  <h1>Login</h1>
+  <input id="username" placeholder="Usuário"><br>
+  <input id="password" type="password" placeholder="Senha"><br>
+  <button onclick="login()">Entrar</button>
+  <button onclick="register()">Cadastrar</button>
+
+  <h2>Meu Diário</h2>
+  <textarea id="entry" placeholder="Escreva algo..."></textarea><br>
+  <button onclick="salvar()">Salvar Entrada</button>
+  <ul id="lista"></ul>
+
+  <script>
+    let token = "";
+
+    async function register() {
+      const resp = await fetch("http://localhost:3000/register", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          username: document.getElementById("username").value,
+          password: document.getElementById("password").value
+        })
+      });
+      alert("Usuário cadastrado!");
+    }
+
+    async function login() {
+      const resp = await fetch("http://localhost:3000/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          username: document.getElementById("username").value,
+          password: document.getElementById("password").value
+        })
+      });
+      const data = await resp.json();
+      token = data.token;
+      carregar();
+    }
+
+    async function salvar() {
+      if (!token) return alert("Faça login primeiro!");
+      const resp = await fetch("http://localhost:3000/diary", {
+        method: "POST",
+        headers: { 
+          "Content-Type": "application/json",
+          "Authorization": "Bearer " + token 
+        },
+        body: JSON.stringify({ content: document.getElementById("entry").value })
+      });
+      document.getElementById("entry").value = "";
+      carregar();
+    }
+
+    async function carregar() {
+      if (!token) return;
+      const resp = await fetch("http://localhost:3000/diary", {
+        headers: { "Authorization": "Bearer " + token }
+      });
+      const lista = await resp.json();
+      document.getElementById("lista").innerHTML = lista.map(l => `<li>${l.content}</li>`).join("");
+    }
+  </script>
+</body>
+</html>
