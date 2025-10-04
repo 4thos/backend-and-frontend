@@ -1,0 +1,71 @@
+// backend/index.js
+const express = require("express");
+const cors = require("cors");
+const bcrypt = require("bcrypt");
+const jwt = require("jsonwebtoken");
+const sqlite3 = require("sqlite3").verbose();
+
+const app = express();
+app.use(cors());
+app.use(express.json());
+
+const SECRET = "segredo123"; // troque depois por algo seguro!
+
+// Banco de dados
+const db = new sqlite3.Database(":memory:");
+db.serialize(() => {
+  db.run("CREATE TABLE users (id INTEGER PRIMARY KEY, username TEXT, password TEXT)");
+  db.run("CREATE TABLE diary (id INTEGER PRIMARY KEY, user_id INTEGER, content TEXT)");
+});
+
+// Cadastro
+app.post("/register", async (req, res) => {
+  const { username, password } = req.body;
+  const hash = await bcrypt.hash(password, 10);
+  db.run("INSERT INTO users (username, password) VALUES (?, ?)", [username, hash], function(err) {
+    if (err) return res.status(500).json({ error: "Erro no cadastro" });
+    res.json({ success: true });
+  });
+});
+
+// Login
+app.post("/login", (req, res) => {
+  const { username, password } = req.body;
+  db.get("SELECT * FROM users WHERE username = ?", [username], async (err, user) => {
+    if (!user) return res.status(400).json({ error: "Usuário não encontrado" });
+    const match = await bcrypt.compare(password, user.password);
+    if (!match) return res.status(400).json({ error: "Senha incorreta" });
+    const token = jwt.sign({ id: user.id }, SECRET, { expiresIn: "1h" });
+    res.json({ token });
+  });
+});
+
+// Middleware para proteger rotas
+function auth(req, res, next) {
+  const token = req.headers.authorization?.split(" ")[1];
+  if (!token) return res.status(403).json({ error: "Token necessário" });
+  jwt.verify(token, SECRET, (err, decoded) => {
+    if (err) return res.status(403).json({ error: "Token inválido" });
+    req.userId = decoded.id;
+    next();
+  });
+}
+
+// Criar entrada no diário
+app.post("/diary", auth, (req, res) => {
+  const { content } = req.body;
+  db.run("INSERT INTO diary (user_id, content) VALUES (?, ?)", [req.userId, content], function(err) {
+    if (err) return res.status(500).json({ error: "Erro ao salvar" });
+    res.json({ success: true, id: this.lastID });
+  });
+});
+
+// Listar entradas
+app.get("/diary", auth, (req, res) => {
+  db.all("SELECT * FROM diary WHERE user_id = ?", [req.userId], (err, rows) => {
+    if (err) return res.status(500).json({ error: "Erro ao listar" });
+    res.json(rows);
+  });
+});
+
+app.listen(3000, () => console.log("✅ Backend rodando em http://localhost:3000"));
